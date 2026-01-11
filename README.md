@@ -122,8 +122,8 @@ plaintext = cipher.decrypt(ciphertext)
 print("Decrypted payload (hex):")
 print(binascii.hexlify(plaintext).decode())
 
-# For this reference telegram, a zero-based AES-CTR initial counter value was used, which yielded a valid OMS application-layer plaintext. 
-# This is consistent with simplified or test-profile OMS telegrams, where nonce components are fixed or omitted.
+#For this reference telegram, a zero-based AES-CTR initial counter value was used, which yielded a valid OMS application-layer plaintext. 
+#This is consistent with simplified or test-profile OMS telegrams, where nonce components are fixed or omitted.
 
 
 
