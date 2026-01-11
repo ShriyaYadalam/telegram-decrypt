@@ -16,54 +16,32 @@ On initial observation of the OMS telegram, it was identified as an ‘OMS compl
     • The presence of a length field at the next byte. (0x44 = 68 bytes).
     • A valid EN 13757-3 manufacturer ID.
     • The standard meter identification and meter fields, and the OMS CI-field value 0x8c, which again denotes OMS encrypted application data.
+    
+| Field                  | Description             | Purpose                                      |
+| ---------------------- | ----------------------- | -------------------------------------------- |
+| Control Field (0xA1)   | Encrypted data telegram | Identifies encrypted Wireless M-Bus telegram |
+| Length Field (0x44)    | Payload length          | Telegram size                                |
+| Manufacturer ID        | 2 bytes                 | Meter manufacturer                           |
+| Meter ID               | 4 bytes                 | Unique device identifier                     |
+| Version                | 1 byte                  | Device version                               |
+| Medium                 | 1 byte                  | Meter type                                   |
+| CI Field (0x8C)        | OMS CI field            | Encrypted OMS payload                        |
 
-Field
-Description
-Purpose
-Control Field (0xA1)
-Indicates encrypted application data
-Identifies encrypted Wireless M-Bus data telegram
-Length Field (0x44)
-Payload length
-Specifies telegram size
-Manufacturer ID
-2 bytes, EN 13757-3 encoded
-Identifies meter manufacturer
-Meter (Device) ID
-4 bytes
-Unique meter serial number
-Version
-1 byte
-Meter version
-Medium
-1 byte
-Type of meter (e.g. water, gas, heat)
-CI Field (0x8C)
-OMS CI field
-Indicates OMS-encrypted application payload
-
-
-
-
+___________________________________________________________________________________________________________________________________________________________________________________
 
 DECODING THE SECURITY HEADER →
 Since the CI field value was identified to be 0x8c, the very next bytes form the OMS Security header, and the OMS Specification, Volume 2 becomes the primary source for interpretation.
     • The first byte of the security header (0x20) corresponds to the security control field, which indicates the use of AES-128 encryption in CTR (Counter) mode.
     • The next byte (0x60) represents the access number, which is incremented for each transmitted telegram and is used for replay protection and IV construction. 
     • The subsequent bytes were identified as the frame counter field, which ensures uniqueness of the encryption keystream, across transmissions.  
-Field
-Description
-Purpose
-Security Control
-Indicates encryption type
-AES-128 in CTR mode
-Access Number
-Incremented per transmission
-Replay protection, nonce input
-Frame Counter
-Counter value
-Ensures keystream uniqueness
 
+| Field            | Value    | Purpose                         |
+| ---------------- | -------- | ------------------------------- |
+| Security Control | 0x20     | AES-128 in CTR mode             |
+| Access Number    | 0x60     | Replay protection / nonce input |
+| Frame Counter    | 7A9D00   | Ensures keystream uniqueness    |
+
+___________________________________________________________________________________________________________________________________________________________________________________
 
 AES-CTR IV/NONCE CONSTRUCTION - 
 Before performing decryption, the AES-CTR initialization vector (IV) was constructed as defined in the OMS Specification, Volume 2, which specifies the counter block format for OMS-encrypted Wireless M-Bus telegrams.
@@ -71,11 +49,7 @@ Before performing decryption, the AES-CTR initialization vector (IV) was constru
     • While OMS specifies that nonce components may be derived from telegram-specific fields, for the provided reference telegram a zero-based initial counter value was used. This was validated by the correctness of the decrypted EN 13757-3 payload.
     • This constructed IV is used as the starting counter value for AES-128-CTR keystream generation during payload decryption.
 
-
-
-
-
-
+___________________________________________________________________________________________________________________________________________________________________________________
 
 AES-128-CTR DECRYPTION - 
 After constructing the AES-CTR initialization vector (IV), the encrypted payload was decrypted using the provided 128-bit AES key, in accordance with the OMS Specification, Volume 2.
@@ -88,6 +62,9 @@ After constructing the AES-CTR initialization vector (IV), the encrypted payload
         ◦ XORing the keystream with the encrypted payload to recover the plaintext.
     • The same operation is used for both encryption and decryption in CTR mode, ensuring deterministic and reproducible results.
     • A Python-based implementation was used for reproducibility, utilising a standard cryptographic library supporting AES-CTR.
+
+___________________________________________________________________________________________________________________________________________________________________________________
+
 
 DECODING THE DECRYPTED OMS PAYLOAD -
 After successful AES-128-CTR decryption, the resulting plaintext was interpreted according to the application layer definitions in EN 13757-3, which specifies the structure and encoding of meter data records.
@@ -106,6 +83,8 @@ After successful AES-128-CTR decryption, the resulting plaintext was interpreted
         ◦ measured value, 
         ◦ unit,
         ◦ and associated context (e.g., current value, historical value). 
+
+___________________________________________________________________________________________________________________________________________________________________________________
 
 TOOLS AND LIBRARIES USED - 
 
@@ -224,6 +203,8 @@ idx += length
 print(f"Raw Data: {data.hex()}")
 record_no += 1
 
+___________________________________________________________________________________________________________________________________________________________________________________
+
 PRESENTATION OF DECODED RESULTS & REPRODUCIBILITY →
 After decoding the decrypted OMS payload according to EN 13757-3, the extracted information was organized into a readable and reproducible format.
     • The decoded payload contains structured meter data records representing measured quantities.
@@ -237,23 +218,12 @@ After decoding the decrypted OMS payload according to EN 13757-3, the extracted 
 
 Decoded data records - 	
 
-Record
-DIF
-VIF / VIFE
-Raw Data (LE)
-Interpreted Value
-Notes
-1
-0x08
-0x83 / 0x7A
-47 5D 21 03
-0x03215D47
-Instantaneous value
-2
-0x1F
-0x24
-—
-—
+| Record | DIF    | VIF / VIFE    | Raw Data (LE) | Interpreted Value | Notes                 |
+| ------ | ------ | ------------- | ------------- | ----------------- | --------------------- |
+| 1      | 0x08   |  0x83 / 0x7A  |  47 5D 21 03  | 0x03215D47        | Instantaneous value   |
+| 2      | 0x1F   |  0x24         | —             | —                 | Manufacturer-specific |
+
+
 Variable-length / manufacturer-specific
 Record 1 Details
     • DIF = 0x08 → 4-byte unsigned integer, instantaneous value
@@ -267,41 +237,25 @@ Record 2 Details
     • The standard does not define the internal structure
     • The record was identified but not further decoded
 
-
-
-
+___________________________________________________________________________________________________________________________________________________________________________________
 
 Extracted Telegram information - 
+| Field               | Value          | Source                |
+| ------------------- | -------------- | --------------------- |
+| Manufacturer ID     | 0xC514         | EN 13757-3 header     |
+| Meter ID            | 27858950       | Device identification |
+| Medium              | Water (0x07)   | Medium field          |
+| Encryption          | AES-128-CTR    | OMS security header   |
+| Access Number       | 0x60           | OMS security header   |
+| Frame Counter       | 7A9D00         | OMS security header   |
+| Standard Records    | 1              | EN 13757-3            |
+| Proprietary Records | 1              | EN 13757-3 (0x1F)     |
 
-Field
-Value
-Source
-Manufacturer ID
-0xC514
-EN 13757-3 header
-Meter ID
-27858950
-Device identification
-Medium
-Water(0x07)
-Medium field
-Encryption
-AES-128-CTR
-OMS security header
-Access Number
-0x60
-OMS security header
-Frame Counter
-7A9D00
-OMS security header
-Measurement Record
-1 standard value
-EN 13757-3
-Proprietary Record
-1
-EN 13757-3 (DIF 0x1F)
  
 
 The OMS telegram was successfully decrypted and decoded using publicly available standards and tools. All standard-defined information contained in the telegram was extracted and interpreted according to EN 13757-3 and EN 13757-4. Variable-length manufacturer-specific data was correctly identified and documented without speculative decoding. The entire process is reproducible and standards-compliant.
 
 The telegram was decoded in two stages: first, the unencrypted Wireless M-Bus and OMS headers were parsed manually according to EN 13757-4 and EN 13757-3 to extract device metadata and security parameters; second, the encrypted application payload was decrypted using AES-128-CTR and interpreted record-by-record using EN 13757-3 DIF/VIF definitions to obtain the actual meter values.
+
+
+
